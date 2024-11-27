@@ -177,10 +177,12 @@ class RichFootPlugin extends Plugin {
         if (!Array.isArray(this.settings.excludedFoldersInLink)) {
             this.settings.excludedFoldersInLink = [];
         }
+        this.clearExcludedLinkFilesCache();  // Clear cache when settings are loaded
     }
 
     async saveSettings() {
         await this.saveData(this.settings);
+        this.clearExcludedLinkFilesCache();  // Clear cache when settings are saved
     }
 
     async checkVersion() {
@@ -411,15 +413,19 @@ class RichFootPlugin extends Plugin {
         const cache = this.app.metadataCache.getFileCache(file);
         const links = new Set();
         
+        // Helper function to process a link
+        const processLink = (linkPath, filePath) => {
+            const cleanPath = linkPath.split('#')[0];  // Remove section reference if present
+            const targetFile = this.app.metadataCache.getFirstLinkpathDest(cleanPath, filePath);
+            if (targetFile?.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
+                links.add(targetFile.path);
+            }
+        };
+        
         // Check regular links in content
         if (cache?.links) {
             for (const link of cache.links) {
-                // Handle both standard links and links with section references
-                const linkPath = link.link.split('#')[0];  // Remove section reference if present
-                const targetFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path);
-                if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
-                    links.add(targetFile.path);
-                }
+                processLink(link.link, file.path);
             }
         }
         
@@ -430,11 +436,7 @@ class RichFootPlugin extends Plugin {
                 for (const link of frontmatterLinks) {
                     const linkText = link.match(/\[\[(.*?)\]\]/)?.[1];
                     if (linkText) {
-                        const linkPath = linkText.split('#')[0];  // Remove section reference if present
-                        const targetFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path);
-                        if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
-                            links.add(targetFile.path);
-                        }
+                        processLink(linkText, file.path);
                     }
                 }
             }
@@ -443,11 +445,7 @@ class RichFootPlugin extends Plugin {
         // Check embeds/transclusions
         if (cache?.embeds) {
             for (const embed of cache.embeds) {
-                const filePath = embed.link.split('#')[0];
-                const targetFile = this.app.metadataCache.getFirstLinkpathDest(filePath, file.path);
-                if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
-                    links.add(targetFile.path);
-                }
+                processLink(embed.link, file.path);
             }
         }
 
@@ -459,11 +457,7 @@ class RichFootPlugin extends Plugin {
                     for (const match of matches) {
                         const linkPath = match.match(/\[.*?\]\((.*?)(?:#.*?)?\)/)?.[1];
                         if (linkPath) {
-                            const cleanPath = linkPath.split('#')[0];  // Remove section reference if present
-                            const targetFile = this.app.metadataCache.getFirstLinkpathDest(cleanPath, file.path);
-                            if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
-                                links.add(targetFile.path);
-                            }
+                            processLink(linkPath, file.path);
                         }
                     }
                 }
@@ -481,6 +475,7 @@ class RichFootPlugin extends Plugin {
         if (this.containerObserver) {
             this.containerObserver.disconnect();
         }
+        this.clearExcludedLinkFilesCache();
     }
 
     // Add this method to check if a file should be excluded
@@ -492,10 +487,26 @@ class RichFootPlugin extends Plugin {
     }
 
     shouldExcludeLinkFile(filePath) {
-        if (!this.settings?.excludedFoldersInLink) {
+        if (!this.settings?.excludedFoldersInLink?.length) {
             return false;
         }
-        return this.settings.excludedFoldersInLink.some(folder => filePath.startsWith(folder));
+        
+        // Cache the excluded folders check result
+        if (!this._excludedLinkFilesCache) {
+            this._excludedLinkFilesCache = new Map();
+        }
+        
+        if (this._excludedLinkFilesCache.has(filePath)) {
+            return this._excludedLinkFilesCache.get(filePath);
+        }
+        
+        const result = this.settings.excludedFoldersInLink.some(folder => filePath.startsWith(folder));
+        this._excludedLinkFilesCache.set(filePath, result);
+        return result;
+    }
+
+    clearExcludedLinkFilesCache() {
+        this._excludedLinkFilesCache = null;
     }
 }
 
