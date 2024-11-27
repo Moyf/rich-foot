@@ -330,10 +330,22 @@ class RichFootPlugin extends Plugin {
 
                     hasValidBacklinks = true;
                     const li = backlinksUl.createEl('li');
-                    const link = li.createEl('a', {
+                    
+                    // Create link container
+                    const linkSpan = li.createSpan({ cls: 'cm-hmd-internal-link' });
+                    
+                    // Create actual link
+                    const link = linkSpan.createEl('a', {
+                        cls: 'cm-underline internal-link',
                         href: linkPath,
-                        text: linkPath.split('/').pop().slice(0, -3)
+                        text: linkPath.split('/').pop().slice(0, -3),
+                        attr: {
+                            'data-href': linkPath,
+                            'tabindex': '-1'
+                        }
                     });
+
+                    // Add click handler
                     link.addEventListener('click', (event) => {
                         event.preventDefault();
                         this.app.workspace.openLinkText(linkPath, file.path);
@@ -359,10 +371,22 @@ class RichFootPlugin extends Plugin {
                     const displayName = parts[parts.length - 1].slice(0, -3);
                     
                     const li = outlinksUl.createEl('li');
-                    const link = li.createEl('a', {
+                    
+                    // Create link container
+                    const linkSpan = li.createSpan({ cls: 'cm-hmd-link' });
+                    
+                    // Create actual link
+                    const link = linkSpan.createEl('a', {
+                        cls: 'cm-underline',
                         href: linkPath,
-                        text: displayName
+                        text: displayName,
+                        attr: {
+                            'data-href': linkPath,
+                            'tabindex': '-1'
+                        }
                     });
+
+                    // Add click handler
                     link.addEventListener('click', (event) => {
                         event.preventDefault();
                         this.app.workspace.openLinkText(linkPath, file.path);
