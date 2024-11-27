@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
     linksOpacity: 1,
     showReleaseNotes: true,
     excludedFolders: [],
+    excludedFoldersInLink: [],
     dateColor: 'var(--text-accent)',
     borderColor: 'var(--text-accent)',
     linkColor: 'var(--link-color)',
@@ -23,6 +24,7 @@ const DEFAULT_SETTINGS = {
 class RichFootSettings {
     constructor() {
         this.excludedFolders = [];
+        this.excludedFoldersInLink = [];
         this.showBacklinks = true;
         this.showOutlinks = false;
         this.showDates = true;
@@ -172,6 +174,9 @@ class RichFootPlugin extends Plugin {
         if (!Array.isArray(this.settings.excludedFolders)) {
             this.settings.excludedFolders = [];
         }
+        if (!Array.isArray(this.settings.excludedFoldersInLink)) {
+            this.settings.excludedFoldersInLink = [];
+        }
     }
 
     async saveSettings() {
@@ -304,6 +309,10 @@ class RichFootPlugin extends Plugin {
     }
 
     createRichFoot(file) {
+        if (!file || this.shouldExcludeFile(file.path)) {
+            return null;
+        }
+
         const richFoot = createDiv({ cls: 'rich-foot' });
         const richFootDashedLine = richFoot.createDiv({ cls: 'rich-foot--dashed-line' });
 
@@ -315,9 +324,11 @@ class RichFootPlugin extends Plugin {
                 const backlinksDiv = richFoot.createDiv({ cls: 'rich-foot--backlinks' });
                 const backlinksUl = backlinksDiv.createEl('ul');
 
+                let hasValidBacklinks = false;
                 for (const [linkPath, linkData] of backlinksData.data) {
-                    if (!linkPath.endsWith('.md')) continue;
+                    if (!linkPath.endsWith('.md') || this.shouldExcludeLinkFile(linkPath)) continue;
 
+                    hasValidBacklinks = true;
                     const li = backlinksUl.createEl('li');
                     const link = li.createEl('a', {
                         href: linkPath,
@@ -329,7 +340,7 @@ class RichFootPlugin extends Plugin {
                     });
                 }
 
-                if (backlinksUl.childElementCount === 0) {
+                if (!hasValidBacklinks) {
                     backlinksDiv.remove();
                 }
             }
@@ -406,7 +417,7 @@ class RichFootPlugin extends Plugin {
                 // Handle both standard links and links with section references
                 const linkPath = link.link.split('#')[0];  // Remove section reference if present
                 const targetFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path);
-                if (targetFile && targetFile.extension === 'md') {
+                if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
                     links.add(targetFile.path);
                 }
             }
@@ -421,7 +432,7 @@ class RichFootPlugin extends Plugin {
                     if (linkText) {
                         const linkPath = linkText.split('#')[0];  // Remove section reference if present
                         const targetFile = this.app.metadataCache.getFirstLinkpathDest(linkPath, file.path);
-                        if (targetFile && targetFile.extension === 'md') {
+                        if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
                             links.add(targetFile.path);
                         }
                     }
@@ -434,7 +445,7 @@ class RichFootPlugin extends Plugin {
             for (const embed of cache.embeds) {
                 const filePath = embed.link.split('#')[0];
                 const targetFile = this.app.metadataCache.getFirstLinkpathDest(filePath, file.path);
-                if (targetFile && targetFile.extension === 'md') {
+                if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
                     links.add(targetFile.path);
                 }
             }
@@ -450,7 +461,7 @@ class RichFootPlugin extends Plugin {
                         if (linkPath) {
                             const cleanPath = linkPath.split('#')[0];  // Remove section reference if present
                             const targetFile = this.app.metadataCache.getFirstLinkpathDest(cleanPath, file.path);
-                            if (targetFile && targetFile.extension === 'md') {
+                            if (targetFile && targetFile.extension === 'md' && !this.shouldExcludeLinkFile(targetFile.path)) {
                                 links.add(targetFile.path);
                             }
                         }
@@ -478,6 +489,13 @@ class RichFootPlugin extends Plugin {
             return false;
         }
         return this.settings.excludedFolders.some(folder => filePath.startsWith(folder));
+    }
+
+    shouldExcludeLinkFile(filePath) {
+        if (!this.settings?.excludedFoldersInLink) {
+            return false;
+        }
+        return this.settings.excludedFoldersInLink.some(folder => filePath.startsWith(folder));
     }
 }
 
@@ -549,6 +567,67 @@ class RichFootSettingTab extends PluginSettingTab {
                     
                     if (newFolder && !this.plugin.settings.excludedFolders.includes(newFolder)) {
                         this.plugin.settings.excludedFolders.push(newFolder);
+                        await this.plugin.saveSettings();
+                        textComponent.setValue('');
+                        this.display(); // Refresh the display
+                    }
+                }));
+
+        // Excluded Folders in Link Section
+        containerEl.createEl('h3', { text: 'Excluded Folders in Link' });
+        containerEl.createEl('p', { 
+            text: 'Files in these folders (and their subfolders) will not be included in backlinks and outlinks calculations. This is useful for excluding certain folders from link statistics while still showing the Rich Foot footer.',
+            cls: 'setting-item-description'
+        });
+        
+        // Create container for excluded folders in link list
+        const excludedFoldersInLinkContainer = containerEl.createDiv('excluded-folders-container');
+        
+        // Display current excluded folders in link
+        if (this.plugin.settings?.excludedFoldersInLink) {
+            this.plugin.settings.excludedFoldersInLink.forEach((folder, index) => {
+                const folderDiv = excludedFoldersInLinkContainer.createDiv('excluded-folder-item');
+                folderDiv.createSpan({ text: folder });
+                
+                const deleteButton = folderDiv.createEl('button', {
+                    text: 'Delete',
+                    cls: 'excluded-folder-delete'
+                });
+                
+                deleteButton.addEventListener('click', async () => {
+                    this.plugin.settings.excludedFoldersInLink.splice(index, 1);
+                    await this.plugin.saveSettings();
+                    this.display();
+                });
+            });
+        }
+
+        // Add new folder in link section
+        const newFolderInLinkSetting = new Setting(containerEl)
+            .setName('Add excluded folder for links')
+            .setDesc('Enter a folder path or browse to select')
+            .addText(text => text
+                .setPlaceholder('folder/subfolder')
+                .onChange(() => {
+                    // We'll handle the change in the add button
+                }))
+            .addButton(button => button
+                .setButtonText('Browse')
+                .onClick(async () => {
+                    const folder = await this.browseForFolder();
+                    if (folder) {
+                        const textComponent = newFolderInLinkSetting.components[0];
+                        textComponent.setValue(folder);
+                    }
+                }))
+            .addButton(button => button
+                .setButtonText('Add')
+                .onClick(async () => {
+                    const textComponent = newFolderInLinkSetting.components[0];
+                    const newFolder = textComponent.getValue().trim();
+                    
+                    if (newFolder && !this.plugin.settings.excludedFoldersInLink.includes(newFolder)) {
+                        this.plugin.settings.excludedFoldersInLink.push(newFolder);
                         await this.plugin.saveSettings();
                         textComponent.setValue('');
                         this.display(); // Refresh the display
