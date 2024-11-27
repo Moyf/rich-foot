@@ -370,23 +370,26 @@ class RichFootPlugin extends Plugin {
                 const outlinksDiv = richFoot.createDiv({ cls: 'rich-foot--outlinks' });
                 const outlinksUl = outlinksDiv.createEl('ul');
 
+                let hasValidOutlinks = false;
                 for (const linkPath of outlinks) {
-                    const parts = linkPath.split('/');
-                    const displayName = parts[parts.length - 1].slice(0, -3);
-                    
+                    if (!linkPath.endsWith('.md') || this.shouldExcludeLinkFile(linkPath)) continue;
+
+                    hasValidOutlinks = true;
                     const li = outlinksUl.createEl('li');
                     
-                    // Create link container
-                    const linkSpan = li.createSpan({ cls: 'cm-hmd-link' });
+                    const displayName = linkPath.split('/').pop().slice(0, -3);
                     
                     // Create actual link
-                    const link = linkSpan.createEl('a', {
-                        cls: 'cm-underline',
+                    const link = li.createEl('a', {
+                        cls: 'internal-link',
                         href: linkPath,
                         text: displayName,
                         attr: {
                             'data-href': linkPath,
-                            'tabindex': '-1'
+                            'data-tooltip-position': 'top',
+                            'aria-label': displayName,
+                            'target': '_blank',
+                            'rel': 'noopener nofollow'
                         }
                     });
 
@@ -395,6 +398,10 @@ class RichFootPlugin extends Plugin {
                         event.preventDefault();
                         this.app.workspace.openLinkText(linkPath, file.path);
                     });
+                }
+
+                if (!hasValidOutlinks) {
+                    outlinksDiv.remove();
                 }
             }
         }
