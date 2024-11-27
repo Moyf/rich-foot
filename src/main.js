@@ -331,17 +331,19 @@ class RichFootPlugin extends Plugin {
                     hasValidBacklinks = true;
                     const li = backlinksUl.createEl('li');
                     
-                    // Create link container
-                    const linkSpan = li.createSpan({ cls: 'cm-hmd-internal-link' });
+                    const displayName = linkPath.split('/').pop().slice(0, -3);
                     
                     // Create actual link
-                    const link = linkSpan.createEl('a', {
-                        cls: 'cm-underline internal-link',
+                    const link = li.createEl('a', {
+                        cls: 'internal-link',
                         href: linkPath,
-                        text: linkPath.split('/').pop().slice(0, -3),
+                        text: displayName,
                         attr: {
                             'data-href': linkPath,
-                            'tabindex': '-1'
+                            'data-tooltip-position': 'top',
+                            'aria-label': displayName,
+                            'target': '_blank',
+                            'rel': 'noopener nofollow'
                         }
                     });
 
